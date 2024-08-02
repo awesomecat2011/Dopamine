@@ -5,6 +5,7 @@
 #include "util.h"
 #include "codesign.h"
 #include <dispatch/dispatch.h>
+#include <unistd.h>  // add this include for usleep - awesomecat2011
 
 uint64_t proc_find(pid_t pidToFind)
 {
@@ -20,6 +21,7 @@ uint64_t proc_find(pid_t pidToFind)
 				*stop = true;
 			}
 		});
+		usleep(10000);  // add a small delay to avoid high cpu usage - awesomecat2011
 	}
 	return foundProc;
 }
