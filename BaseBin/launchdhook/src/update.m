@@ -46,13 +46,15 @@ int jbupdate_basebin(const char *basebinTarPath)
 
 		// Replace basebin content
 		NSArray *newBasebinContents = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:tmpBasebinPath error:nil];
-		for (NSString *basebinItem in newBasebinContents) {
-			NSString *newBasebinPath = [tmpBasebinPath stringByAppendingPathComponent:basebinItem];
-			NSString *oldBasebinPath = [JBROOT_PATH(@"/basebin") stringByAppendingPathComponent:basebinItem];
-			if ([[NSFileManager defaultManager] fileExistsAtPath:oldBasebinPath]) {
-				[[NSFileManager defaultManager] removeItemAtPath:oldBasebinPath error:nil];
+		if (newBasebinContents != nil) {
+			for (NSString *basebinItem in newBasebinContents) {
+				NSString *newBasebinPath = [tmpBasebinPath stringByAppendingPathComponent:basebinItem];
+				NSString *oldBasebinPath = [JBROOT_PATH(@"/basebin") stringByAppendingPathComponent:basebinItem];
+				if ([[NSFileManager defaultManager] fileExistsAtPath:oldBasebinPath]) {
+					[[NSFileManager defaultManager] removeItemAtPath:oldBasebinPath error:nil];
+				}
+				[[NSFileManager defaultManager] copyItemAtPath:newBasebinPath toPath:oldBasebinPath error:nil];
 			}
-			[[NSFileManager defaultManager] copyItemAtPath:newBasebinPath toPath:oldBasebinPath error:nil];
 		}
 		[[NSFileManager defaultManager] removeItemAtPath:tmpExtractionPath error:nil];
 
@@ -168,40 +170,18 @@ void jbupdate_update_system_info(void)
 		xpc_dictionary_set_uint64(systemInfoXdict, "kernelConstant.physSize", kconstant(physSize));
 		xpc_dictionary_set_uint64(systemInfoXdict, "kernelConstant.cpuTTEP", kconstant(cpuTTEP));
 		xpc_dictionary_set_uint64(systemInfoXdict, "jailbreakInfo.usesPACBypass", jbinfo(usesPACBypass));
-		xpc_dictionary_set_string(systemInfoXdict, "jailbreakInfo.rootPath", jbinfo(rootPath));
+		xpc_dictionary_set_uint64(systemInfoXdict, "jailbreakInfo.hasSSSChecks", jbinfo(hasSSSChecks));
+		xpc_dictionary_set_uint64(systemInfoXdict, "jailbreakInfo.usesPMAPOptions", jbinfo(usesPMAPOptions));
 
-		// Rebuild gSystemInfo
-		jbinfo_initialize_dynamic_offsets(systemInfoXdict);
-		jbinfo_initialize_hardcoded_offsets();
+		NSDictionary *newSystemInfoDict = [NSDictionary dictionaryWithContentsOfFile:JBROOT_PATH("/basebin/.systeminfo")] ?: [NSDictionary dictionary];
+
+		NSMutableDictionary *combinedDict = [NSMutableDictionary dictionaryWithDictionary:newSystemInfoDict];
+		combinedDict[@"constants"] = [NSDictionary dictionaryWithDictionary:(__bridge NSDictionary *)(systemInfoXdict)];
+		xpc_release(systemInfoXdict);
+
+		[combinedDict writeToFile:JBROOT_PATH("/basebin/.systeminfo") atomically:YES];
+
+		setenv("SYSTEMINFO_CONSTANTS_SLIDE", [NSString stringWithFormat:@"0x%llx", kconstant(slide)].UTF8String, 1);
+		setenv("SYSTEMINFO_CONSTANTS_STATIC_BASE", [NSString stringWithFormat:@"0x%llx", kconstant(staticBase)].UTF8String, 1);
 	}
-}
-
-// Before primitives are retrieved
-void jbupdate_finalize_stage1(const char *prevVersion, const char *newVersion)
-{
-	// Currently unused, reserved for the future
-}
-
-// After primitives are retrieved
-void jbupdate_finalize_stage2(const char *prevVersion, const char *newVersion)
-{
-	jbupdate_update_system_info();
-
-	// Legacy, this file is no longer used
-	if (!access(JBROOT_PATH("/basebin/.idownloadd_enabled"), F_OK)) {
-		remove(JBROOT_PATH("/basebin/.idownloadd_enabled"));
-	}
-
-	if (strcmp(prevVersion, "2.1") < 0 && strcmp(newVersion, "2.1") >= 0) {
-		// Default value for this pref is true
-		// Set it during jbupdate if prev version is <2.1 and new version is >=2.1
-		gSystemInfo.jailbreakSettings.markAppsAsDebugged = true;
-
-#ifndef __arm64e__
-		// Initialize kcall only after we have the offsets required for it
-		arm64_kcall_init();
-#endif
-	}
-
-	JBFixMobilePermissions();
 }
