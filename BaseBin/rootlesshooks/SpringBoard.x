@@ -4,8 +4,8 @@
 #import <libroot.h>
 #import <fcntl.h>
 
-bool string_has_prefix(const char *str, const char* prefix)
-{
+// util func to check if a string has a given prefix
+bool string_has_prefix(const char *str, const char* prefix) {
 	if (!str || !prefix) {
 		return false;
 	}
@@ -25,18 +25,21 @@ bool string_has_prefix(const char *str, const char* prefix)
 - (NSString*)snapshotContainerPath;
 @end
 
+#pragma mark - Hook XBSnapshotContainerIdentity
+
 %hook XBSnapshotContainerIdentity
 
-- (NSString *)snapshotContainerPath
-{
+- (NSString *)snapshotContainerPath {
 	NSString *path = %orig;
-	if([path hasPrefix:@"/var/mobile/Library/SplashBoard/Snapshots/"] && ![self.bundleIdentifier hasPrefix:@"com.apple."]) {
+	if ([path hasPrefix:@"/var/mobile/Library/SplashBoard/Snapshots/"] && ![self.bundleIdentifier hasPrefix:@"com.apple."]) {
 		return JBROOT_PATH_NSSTRING(path);
 	}
 	return path;
 }
 
 %end
+
+#pragma mark - Hook fcntl
 
 %hookf(int, fcntl, int fildes, int cmd, ...) {
 	if (cmd == F_SETPROTECTIONCLASS) {
@@ -49,23 +52,17 @@ bool string_has_prefix(const char *str, const char* prefix)
 		}
 	}
 
-	va_list a;
-	va_start(a, cmd);
-	const char *arg1 = va_arg(a, void *);
-	const void *arg2 = va_arg(a, void *);
-	const void *arg3 = va_arg(a, void *);
-	const void *arg4 = va_arg(a, void *);
-	const void *arg5 = va_arg(a, void *);
-	const void *arg6 = va_arg(a, void *);
-	const void *arg7 = va_arg(a, void *);
-	const void *arg8 = va_arg(a, void *);
-	const void *arg9 = va_arg(a, void *);
-	const void *arg10 = va_arg(a, void *);
-	va_end(a);
-	return %orig(fildes, cmd, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
+	va_list args;
+	va_start(args, cmd);
+	int result = %orig(fildes, cmd, args);
+	va_end(args);
+
+	return result;
 }
 
-void springboardInit(void)
-{
+#pragma mark - Initialize SpringBoard Hooks
+
+// func to init springboard hooks
+void springboardInit(void) {
 	%init();
 }
